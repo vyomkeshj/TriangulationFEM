@@ -9,7 +9,6 @@ namespace algorithms {
         bool show_wireframe;
 
         _viz(bool isShowWireframe = true);
-
         ~_viz();
 
         void create_viz(std::vector<Vec3D *> &dots, std::vector<std::tuple<int, int, int> *> &mesh);
