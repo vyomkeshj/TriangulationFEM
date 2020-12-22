@@ -3,8 +3,8 @@
   <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
   <component name="CidrRootsConfiguration">
     <sourceRoots>
-      <file path="$PROJECT_DIR$/Header" />
       <file path="$PROJECT_DIR$/Source" />
+      <file path="$PROJECT_DIR$/headers" />
     </sourceRoots>
   </component>
 </project>

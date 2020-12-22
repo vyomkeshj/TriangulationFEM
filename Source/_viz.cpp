@@ -11,41 +11,37 @@
 #include <vtkRenderer.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkInteractorStyleTrackballCamera.h>
-#include "../Header/Visualization.h"
+#include "../headers/_viz.h"
 #include <vtkUnsignedCharArray.h>
+
 using namespace std;
-using namespace dt;
+using namespace algorithms;
 
-Visualization::Visualization(bool isShowWireframe)
-{
-    IsShowWireframe = isShowWireframe;
+_viz::_viz(bool isShowWireframe) {
+    show_wireframe = isShowWireframe;
 }
 
-Visualization::~Visualization()
-{
+_viz::~_viz() {
 }
 
-void Visualization::ReconstructIn3D(vector<Vector3D*> &dots, vector<tuple<int, int, int>*> &mesh)
-{
-    vtkPoints* points = vtkPoints::New();
-    vtkUnsignedCharArray* colors = vtkUnsignedCharArray::New();
-    vtkCellArray* cells = vtkCellArray::New();
+void _viz::create_viz(vector<Vec3D *> &dots, vector<tuple<int, int, int> *> &mesh) {
+    vtkPoints *points = vtkPoints::New();
+    vtkUnsignedCharArray *colors = vtkUnsignedCharArray::New();
+    vtkCellArray *cells = vtkCellArray::New();
 
     colors->SetNumberOfComponents(3);
     colors->SetName("Colors");
 
-    vector<Vector3D*>::iterator itDots;
-    for (itDots = dots.begin(); itDots != dots.end(); itDots++)
-    {
-        Vector3D* dot = *itDots;
+    vector<Vec3D *>::iterator itDots;
+    for (itDots = dots.begin(); itDots != dots.end(); itDots++) {
+        Vec3D *dot = *itDots;
         points->InsertNextPoint(dot->X, dot->Y, dot->Z);
         colors->InsertNextTuple3(dot->R, dot->G, dot->B);
     }
 
-    vtkTriangle* vtkTriangle;
-    vector<tuple<int, int, int>*>::iterator itMesh;
-    for (itMesh = mesh.begin(); itMesh != mesh.end(); itMesh++)
-    {
+    vtkTriangle *vtkTriangle;
+    vector<tuple<int, int, int> *>::iterator itMesh;
+    for (itMesh = mesh.begin(); itMesh != mesh.end(); itMesh++) {
         vtkTriangle = vtkTriangle::New();
         vtkTriangle->GetPointIds()->SetId(0, get<0>(**itMesh));
         vtkTriangle->GetPointIds()->SetId(1, get<1>(**itMesh));
@@ -54,31 +50,30 @@ void Visualization::ReconstructIn3D(vector<Vector3D*> &dots, vector<tuple<int, i
         cells->InsertNextCell(vtkTriangle);
     }
 
-    vtkRenderer* renderer = vtkRenderer::New();
-    vtkRenderWindow* renderWindow = vtkRenderWindow::New();
+    vtkRenderer *renderer = vtkRenderer::New();
+    vtkRenderWindow *renderWindow = vtkRenderWindow::New();
     renderWindow->AddRenderer(renderer);
 
-    vtkRenderWindowInteractor* renderWindowInteractor =
-        vtkRenderWindowInteractor::New();
+    vtkRenderWindowInteractor *renderWindowInteractor =
+            vtkRenderWindowInteractor::New();
     renderWindowInteractor->SetRenderWindow(renderWindow);
 
-    vtkInteractorStyleTrackballCamera* style =
-        vtkInteractorStyleTrackballCamera::New();
+    vtkInteractorStyleTrackballCamera *style =
+            vtkInteractorStyleTrackballCamera::New();
     renderWindowInteractor->SetInteractorStyle(style);
 
-    vtkPolyData* trianglePolyData = vtkPolyData::New();
+    vtkPolyData *trianglePolyData = vtkPolyData::New();
 
     trianglePolyData->SetPoints(points);
     trianglePolyData->SetPolys(cells);
     trianglePolyData->GetPointData()->SetScalars(colors);
 
-    vtkPolyDataMapper* mapper = vtkPolyDataMapper::New();
+    vtkPolyDataMapper *mapper = vtkPolyDataMapper::New();
     mapper->SetInputData(trianglePolyData);
 
-    vtkActor* actor = vtkActor::New();
+    vtkActor *actor = vtkActor::New();
     actor->SetMapper(mapper);
-    if (true)
-    {
+    if (true) {
         actor->GetProperty()->SetRepresentationToWireframe();
     }
 
