@@ -74,3 +74,7 @@ string Vector3D::ToString()
         + "IsVisited: " + (IsVisited ? "true" : "false") + "; "
         + "IsAuxiliaryDot: " + (IsAuxiliaryDot ? "true" : "false") + ";\n";
 }
+
+bool Vector3D::IsInSamePosition(Vector3D *dot) {
+    return (X == dot->X && Y == dot->Y && Z == dot->Z);
+}

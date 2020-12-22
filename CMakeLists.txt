@@ -26,6 +26,8 @@ link_directories(${QT_LIBRARY_DIRS})
 
 include(${VTK_USE_FILE})
 
+set(SOURCES Main.cpp)
+
 include_directories(include ./Header, ./Source)
 add_executable(RealCollaborationCal Main.cpp Source/DelaunayTriangulation.cpp Source/DotCloudReader.cpp
         Source/DotCloudGenerator.cpp

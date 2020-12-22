@@ -3,7 +3,7 @@
 #include <tuple>
 #include <vector>
 #include "../Header/Triangulation.h"
-
+#include <iostream>
 using namespace std;
 using namespace dt;
 
@@ -61,7 +61,9 @@ vector<tuple<int, int, int>*> DelaunayTriangulation::GetTriangulationResult(vect
     _Mesh->reserve(8 + (dots.size() - 6) * 2);
 
     // project dots to an unit shpere for triangulation
-    vector<Vector3D*>::iterator itDots;
+    vector<Vector3D*>::iterator itDots;     // iterator over the dots vector input, here we convert from input dots to _ProjDots
+    //TODO: OMP acceleration possible, this is a long loop, but linear is faster because of the critical section
+
     for (itDots = dots.begin(); itDots != dots.end(); itDots++)
     {
         Vector3D* projectedDot = new Vector3D((*itDots), VECTOR_LENGTH);
@@ -71,9 +73,20 @@ vector<tuple<int, int, int>*> DelaunayTriangulation::GetTriangulationResult(vect
     // prepare initial convex hull with 6 vertices and 8 triangle faces
     BuildInitialHull(_ProjectedDots);
 
+//TODO: examine open mp acceleration case
+//For each dot in projected dots, if the dot has not been prev. visited, InsertDot(dot)
+
+/*
+for(int i = 0; i<_ProjectedDots->size(); i++) {
+    Vector3D* dot = dots[i];
+    if (!dot->IsVisited) {
+        InsertDot(dot);
+    }
+}
+ */
     for (itDots = _ProjectedDots->begin(); itDots != _ProjectedDots->end(); itDots++)
     {
-        Vector3D* dot = *itDots;
+        Vector3D* dot = *itDots;    //dereference the iterator to get the dot vector
         if (!dot->IsVisited)
         {
             InsertDot(dot);
@@ -173,81 +186,77 @@ void DelaunayTriangulation::BuildInitialHull(vector<Vector3D*>* dots)
 
 void DelaunayTriangulation::InsertDot(Vector3D* dot)
 {
-    double det[] = { 0, 0, 0 };
+    double det_1 = 0, det_2 = 0, det_3 = 0;
 
     vector<Triangle*>::iterator it;
     it = _Mesh->begin();
     Triangle* triangle = *it;
-
     while (it != _Mesh->end())
     {
         _Statistics[0]++;
 
-        det[0] = GetDeterminant(triangle->Vertex[0], triangle->Vertex[1], dot);
-        det[1] = GetDeterminant(triangle->Vertex[1], triangle->Vertex[2], dot);
-        det[2] = GetDeterminant(triangle->Vertex[2], triangle->Vertex[0], dot);
-
-        // if this dot projected into an existing triangle, split the existing triangle to 3 new ones
-        if (det[0] >= 0 && det[1] >= 0 && det[2] >= 0)
+#pragma omp parallel
         {
-            if (!triangle->HasVertexCoincidentWith(dot))
+#pragma omp single
             {
-                SplitTriangle(triangle, dot);
-            }
+                    det_1 = GetDeterminant(triangle->Vertex[0], triangle->Vertex[1], dot);
+                    det_2 = GetDeterminant(triangle->Vertex[1], triangle->Vertex[2], dot);
+                    det_3 = GetDeterminant(triangle->Vertex[2], triangle->Vertex[0], dot);
 
+            }
+        }
+    // if this dot projected into an existing triangle, split the existing triangle to 3 new ones
+        if (det_1 >= 0 && det_2 >= 0 && det_3 >= 0) {
+            if (!triangle->HasVertexCoincidentWith(dot)) {
+
+                SplitTriangle(triangle, dot);       //the call inside the ifs, 2463 -> 1187 or 1448 ~1000ms, around 1-2 msec per exec
+            }
             return;
+        }   else if (det_2 >= 0 && det_3 >= 0)  // on one side, search neighbors
+                triangle = triangle->Neighbor[0];
+            else if (det_1 >= 0 && det_3 >= 0)
+                triangle = triangle->Neighbor[1];
+            else if (det_1 >= 0 && det_2 >= 0)
+                triangle = triangle->Neighbor[2];
+
+                // cannot determine effectively
+            else if (det_1 > 0)
+                triangle = triangle->Neighbor[1];
+            else if (det_2 > 0)
+                triangle = triangle->Neighbor[2];
+            else if (det_3 > 0)
+                triangle = triangle->Neighbor[0];
+            else {
+             triangle = *it++;
         }
 
-        // on one side, search neighbors
-        else if (det[1] >= 0 && det[2] >= 0)
-            triangle = triangle->Neighbor[0];
-        else if (det[0] >= 0 && det[2] >= 0)
-            triangle = triangle->Neighbor[1];
-        else if (det[0] >= 0 && det[1] >= 0)
-            triangle = triangle->Neighbor[2];
-
-        // cannot determine effectively 
-        else if (det[0] >= 0)
-            triangle = triangle->Neighbor[1];
-        else if (det[1] >= 0)
-            triangle = triangle->Neighbor[2];
-        else if (det[2] >= 0)
-            triangle = triangle->Neighbor[0];
-        else
-            triangle = *it++;
-    }
+}
 }
 
-void DelaunayTriangulation::RemoveExtraTriangles()
-{
-    vector<Triangle*>::iterator it;
-    for (it = _Mesh->begin(); it != _Mesh->end();)
-    {
-        Triangle* triangle = *it;
+void DelaunayTriangulation::RemoveExtraTriangles() {
+    vector<Triangle *>::iterator it;
+    for (it = _Mesh->begin(); it != _Mesh->end();) {
+        Triangle *triangle = *it;
         bool isExtraTriangle = false;
-        for (int i = 0; i < 3; i++)
-        {
-            if (triangle->Vertex[i]->IsAuxiliaryDot)
-            {
+        for (int i = 0; i < 3; i++) {
+            if (triangle->Vertex[i]->IsAuxiliaryDot) {
                 isExtraTriangle = true;
                 break;
             }
         }
 
-        if (isExtraTriangle)
-        {
+        if (isExtraTriangle) {
             delete *it;
             it = _Mesh->erase(it);
-        }
-        else
-        {
+        } else {
             it++;
         }
     }
 }
-
+// takes 1-2 msec per call
 void DelaunayTriangulation::SplitTriangle(Triangle* triangle, Vector3D* dot)
 {
+
     Triangle* newTriangle1 = new Triangle(dot, triangle->Vertex[1], triangle->Vertex[2]);
     Triangle* newTriangle2 = new Triangle(dot, triangle->Vertex[2], triangle->Vertex[0]);
 
@@ -264,12 +273,28 @@ void DelaunayTriangulation::SplitTriangle(Triangle* triangle, Vector3D* dot)
 
     _Mesh->push_back(newTriangle1);
     _Mesh->push_back(newTriangle2);
-
     // optimize triangles according to delaunay triangulation definition
-    DoLocalOptimization(triangle, triangle->Neighbor[1]);
-    DoLocalOptimization(newTriangle1, newTriangle1->Neighbor[1]);
-    DoLocalOptimization(newTriangle2, newTriangle2->Neighbor[1]);
+#pragma omp parallel
+    {
+#pragma omp single
+        {
+#pragma omp task
+            {
+                DoLocalOptimization(triangle, triangle->Neighbor[1]);
+            }
+#pragma omp task
+            {
+                DoLocalOptimization(newTriangle1, newTriangle1->Neighbor[1]);
+            }
+#pragma omp task
+            {
+                DoLocalOptimization(newTriangle2, newTriangle2->Neighbor[1]);
+            }
+        }
+    }
 }
+
+
 
 void DelaunayTriangulation::FixNeighborhood(Triangle* target, Triangle* oldNeighbor, Triangle* newNeighbor)
 {
@@ -344,13 +369,17 @@ bool DelaunayTriangulation::TrySwapDiagonal(Triangle* t0, Triangle* t1)
                 t0->Neighbor[(j + 2) % 3] = t1;
                 t1->Neighbor[(k + 2) % 3] = t0;
 
-                FixNeighborhood(t0->Neighbor[(j + 1) % 3], t1, t0);
-                FixNeighborhood(t1->Neighbor[(k + 1) % 3], t0, t1);
 
-                DoLocalOptimization(t0, t0->Neighbor[j]);
-                DoLocalOptimization(t0, t0->Neighbor[(j + 1) % 3]);
-                DoLocalOptimization(t1, t1->Neighbor[k]);
-                DoLocalOptimization(t1, t1->Neighbor[(k + 1) % 3]);
+                            FixNeighborhood(t0->Neighbor[(j + 1) % 3], t1, t0);
+                            FixNeighborhood(t1->Neighbor[(k + 1) % 3], t0, t1);
+
+                            DoLocalOptimization(t0, t0->Neighbor[j]);
+                            DoLocalOptimization(t0, t0->Neighbor[(j + 1) % 3]);
+                            DoLocalOptimization(t1, t1->Neighbor[k]);
+                            DoLocalOptimization(t1, t1->Neighbor[(k + 1) % 3]);
+                        }
+                    }
+                }
 
                 return true;
             }
@@ -393,6 +422,7 @@ double DelaunayTriangulation::GetDeterminant(Vector3D* v0, Vector3D* v1, Vector3
 
 double DelaunayTriangulation::GetDeterminant(double matrix[])
 {
+//todo: can I break it down and parallelize?
     // inversed for left handed coordinate system
     double determinant = matrix[2] * matrix[4] * matrix[6]
         + matrix[0] * matrix[5] * matrix[7]

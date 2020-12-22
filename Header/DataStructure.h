@@ -23,7 +23,7 @@ namespace dt
         Vector3D(double x, double y, double z, bool isAuxiliaryDot, uint8_t r = 255, uint8_t g = 248, uint8_t b = 220);
         Vector3D(Vector3D* dot, double lengthAfterProjection);
         ~Vector3D();
-
+        bool IsInSamePosition(Vector3D* dot);
         bool IsCoincidentWith(Vector3D* dot);
         std::string ToString();
     };
